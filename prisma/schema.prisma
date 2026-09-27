@@ -1,0 +1,105 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Profile {
+  id              String   @id @default(uuid()) @db.Uuid
+  fullName        String   @default("") @map("full_name")
+  email           String   @default("")
+  avatarUrl       String?  @default("") @map("avatar_url")
+  phone           String?  @default("")
+  city            String?  @default("")
+  university      String?  @default("")
+  bio             String?  @default("")
+  role            String   @default("member") // "member" | "president" | "super_admin"
+  isCabinet       Boolean  @default(false) @map("is_cabinet")
+  cabinetPosition String?  @map("cabinet_position")
+  cabinetOrder    Int?     @default(999) @map("cabinet_order")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  eventsCreated       Event[]       @relation("CreatedEvents")
+  eventsWon           EventResult[] @relation("EventWinner")
+  eventsRunnerUp      EventResult[] @relation("EventRunnerUp")
+  eventsSecondRunnerUp EventResult[] @relation("EventSecondRunnerUp")
+  eventsDeclared      EventResult[] @relation("DeclaredResults")
+  leaderboardEntries  Leaderboard[]
+
+  @@index([role])
+  @@index([isCabinet, cabinetOrder])
+  @@map("profiles")
+}
+
+model Event {
+  id               String       @id @default(uuid()) @db.Uuid
+  createdBy        String?      @map("created_by") @db.Uuid
+  title            String
+  slug             String?      @unique
+  description      String       @db.Text
+  imageUrl         String?      @default("") @map("image_url")
+  registrationLink String?      @default("") @map("registration_link")
+  bookletPdfUrl    String?      @default("") @map("booklet_pdf_url")
+  eventDate        DateTime     @map("event_date") @db.Date
+  eventTime        String       @default("10:00 AM") @map("event_time")
+  venue            String       @default("Online / To be announced")
+  status           String       @default("pending") // "pending" | "approved" | "rejected" | "concluded"
+  rejectionReason  String?      @map("rejection_reason")
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  creator Profile?     @relation("CreatedEvents", fields: [createdBy], references: [id], onDelete: SetNull)
+  result  EventResult?
+
+  @@index([status, eventDate])
+  @@index([createdBy])
+  @@map("events")
+}
+
+model EventResult {
+  id                 String   @id @default(uuid()) @db.Uuid
+  eventId            String   @unique @map("event_id") @db.Uuid
+  winnerId           String   @map("winner_id") @db.Uuid
+  runnerUpId         String?  @map("runner_up_id") @db.Uuid
+  secondRunnerUpId   String?  @map("second_runner_up_id") @db.Uuid
+  year               Int
+  notes              String?  @default("") @db.Text
+  declaredBy         String?  @map("declared_by") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  event          Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  winner         Profile  @relation("EventWinner", fields: [winnerId], references: [id], onDelete: Restrict)
+  runnerUp       Profile? @relation("EventRunnerUp", fields: [runnerUpId], references: [id], onDelete: Restrict)
+  secondRunnerUp Profile? @relation("EventSecondRunnerUp", fields: [secondRunnerUpId], references: [id], onDelete: Restrict)
+  declarer       Profile? @relation("DeclaredResults", fields: [declaredBy], references: [id], onDelete: SetNull)
+
+  @@index([year])
+  @@index([winnerId])
+  @@index([runnerUpId])
+  @@map("event_results")
+}
+
+model Leaderboard {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  year        Int      // 0 for All-Time, or year (e.g. 2026)
+  wins        Int      @default(0)
+  runnerUps   Int      @default(0) @map("runner_ups")
+  totalPoints Int      @default(0) @map("total_points")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, year])
+  @@index([year, totalPoints(sort: Desc)])
+  @@map("leaderboard")
+}
